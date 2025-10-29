@@ -238,7 +238,12 @@ process_csv() {
       continue
     fi
 
-    if [[ "$first_name" =~ ^[Ff]irst ?[Nn]ame$ ]] || [[ "$student_id" =~ ^[Ss]tudent ?[Ii][Dd]$ ]]; then
+    local header_first
+    local header_id
+    header_first=$(echo "$first_name" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+    header_id=$(echo "$student_id" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+
+    if [[ "$header_first" == "firstname" ]] || [[ "$header_id" == "studentid" ]]; then
       continue
     fi
 
