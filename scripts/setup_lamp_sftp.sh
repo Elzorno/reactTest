@@ -102,17 +102,52 @@ setup_sftp_group() {
     echo 'PasswordAuthentication yes' >>"$sshd_config"
   fi
 
-  if ! grep -q "^Match Group $group" "$sshd_config"; then
-    cp "$sshd_config"{,.bak.$(date +%Y%m%d%H%M%S)}
-    cat <<CONFIG >>"$sshd_config"
-
-Match Group $group
+  local match_block="Match Group $group
     ChrootDirectory $base_dir/%u
     ForceCommand internal-sftp
     PasswordAuthentication yes
     X11Forwarding no
-    AllowTcpForwarding no
-CONFIG
+    AllowTcpForwarding no"
+
+  if grep -q "^Match Group $group" "$sshd_config"; then
+    # Rewrite any existing Match block so that legacy configurations (e.g. ChrootDirectory
+    # /sftp/%u) are replaced with the expected directory structure under /var/www/students.
+    local tmp
+    tmp=$(mktemp)
+    awk -v block="$match_block" '
+      BEGIN { in_block = 0; written = 0 }
+      {
+        if ($0 ~ /^Match[[:space:]]+Group[[:space:]]+sftpusers/) {
+          if (!written) {
+            print block >> out
+            written = 1
+          }
+          in_block = 1
+          next
+        }
+
+        if (in_block) {
+          if ($0 ~ /^Match\b/) {
+            in_block = 0
+            print $0 >> out
+          }
+          next
+        }
+
+        print $0 >> out
+      }
+      END {
+        if (!written) {
+          print block >> out
+        }
+      }
+    ' out="$tmp" "$sshd_config"
+    cp "$sshd_config"{,.bak.$(date +%Y%m%d%H%M%S)}
+    cat "$tmp" >"$sshd_config"
+    rm -f "$tmp"
+  else
+    cp "$sshd_config"{,.bak.$(date +%Y%m%d%H%M%S)}
+    printf '\n%s\n' "$match_block" >>"$sshd_config"
   fi
 
   systemctl restart sshd
