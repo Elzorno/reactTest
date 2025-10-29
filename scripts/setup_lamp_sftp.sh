@@ -88,6 +88,20 @@ setup_sftp_group() {
   chmod 755 /etc/skel /etc/skel/public_html
 
   bold "Configuring sshd for SFTP chroot..."
+  if grep -Eq '^\s*Subsystem\s+sftp' "$sshd_config"; then
+    if ! grep -Eq '^\s*Subsystem\s+sftp\s+internal-sftp' "$sshd_config"; then
+      sed -i 's|^\s*Subsystem\s\+sftp\s\+.*$|Subsystem sftp internal-sftp|' "$sshd_config"
+    fi
+  else
+    echo 'Subsystem sftp internal-sftp' >>"$sshd_config"
+  fi
+
+  if grep -Eq '^\s*PasswordAuthentication\s+no' "$sshd_config"; then
+    sed -i 's|^\s*PasswordAuthentication\s\+no|PasswordAuthentication yes|' "$sshd_config"
+  elif ! grep -Eq '^\s*PasswordAuthentication\s+' "$sshd_config"; then
+    echo 'PasswordAuthentication yes' >>"$sshd_config"
+  fi
+
   if ! grep -q "^Match Group $group" "$sshd_config"; then
     cp "$sshd_config"{,.bak.$(date +%Y%m%d%H%M%S)}
     cat <<CONFIG >>"$sshd_config"
@@ -107,8 +121,10 @@ CONFIG
 set_selinux_contexts() {
   if command_exists getenforce && [[ $(getenforce) != "Disabled" ]]; then
     bold "Configuring SELinux contexts for student web directories..."
+    setsebool -P httpd_enable_homedirs on
+    semanage fcontext -a -t ssh_home_t '/var/www/students(/.*)?' 2>/dev/null || true
     semanage fcontext -a -t httpd_sys_rw_content_t \
-      '/var/www/students(/.*)?' || true
+      '/var/www/students/[^/]+/public_html(/.*)?' 2>/dev/null || true
     restorecon -Rv /var/www/students || true
   else
     echo "SELinux not enforced; skipping context adjustments." >&2

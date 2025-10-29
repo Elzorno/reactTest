@@ -197,6 +197,10 @@ create_linux_account() {
   chown "$username":sftpusers "$home_base/public_html"
   chmod 755 "$home_base/public_html"
 
+  if command_exists restorecon; then
+    restorecon -Rv "$home_base" >/dev/null 2>&1 || true
+  fi
+
   linux_password=$(random_password)
   echo "$username:$linux_password" | chpasswd
   echo "$linux_password"
